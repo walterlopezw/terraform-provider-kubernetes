@@ -826,11 +826,11 @@ The `items` block supports the following:
 
 ## Timeouts
 
-The following [Timeout](/docs/configuration/resources.html#operation-timeouts) configuration options are available for the `kubernetes_daemon_set_v1` resource:
+The following [Timeout](/docs/language/resources/syntax.html#operation-timeouts) configuration options are available for the `kubernetes_daemon_set_v1` resource:
 
-* `create` - (Default `10 minutes`) Used for creating new controller
-* `update` - (Default `10 minutes`) Used for updating a controller
-* `delete` - (Default `10 minutes`) Used for destroying a controller
+* `create` - (Default `10m`) Used for creating new controller
+* `update` - (Default `10m`) Used for updating a controller
+* `delete` - (Default `10m`) Used for destroying a controller
 
 ## Import
 
