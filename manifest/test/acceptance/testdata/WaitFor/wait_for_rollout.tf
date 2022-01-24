@@ -41,7 +41,5 @@ resource kubernetes_manifest wait_for_rollout {
 
   wait_for = {
     rollout = true
-    
-    fields = {} # FIXME remove this
   }
 }

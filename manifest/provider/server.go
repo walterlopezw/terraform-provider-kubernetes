@@ -60,8 +60,15 @@ func (s *RawProviderServer) UpgradeResourceState(ctx context.Context, req *tfpro
 	resp := &tfprotov5.UpgradeResourceStateResponse{}
 	resp.Diagnostics = []*tfprotov5.Diagnostic{}
 
-	sch := GetProviderResourceSchema()
-	rt := GetObjectTypeFromSchema(sch[req.TypeName])
+	rt, err := GetResourceType(req.TypeName)
+	if err != nil {
+		resp.Diagnostics = append(resp.Diagnostics, &tfprotov5.Diagnostic{
+			Severity: tfprotov5.DiagnosticSeverityError,
+			Summary:  "Failed to determine resource type",
+			Detail:   err.Error(),
+		})
+		return resp, nil
+	}
 
 	rv, err := req.RawState.Unmarshal(rt)
 	if err != nil {

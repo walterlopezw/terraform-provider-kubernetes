@@ -31,7 +31,7 @@ func GetObjectTypeFromSchema(schema *tfprotov5.Schema) tftypes.Type {
 
 // GetResourceType returns the tftypes.Type of a resource of type 'name'
 func GetResourceType(name string) (tftypes.Type, error) {
-	sch := GetProviderResourceSchema()
+	sch := GetProviderResourceSchema(false)
 	rsch, ok := sch[name]
 	if !ok {
 		return tftypes.DynamicPseudoType, fmt.Errorf("unknown resource %s - cannot find schema", name)
@@ -40,7 +40,14 @@ func GetResourceType(name string) (tftypes.Type, error) {
 }
 
 // GetProviderResourceSchema contains the definitions of all supported resources
-func GetProviderResourceSchema() map[string]*tfprotov5.Schema {
+//
+// NOTE optionalAttributes specifies whether or not to include the OptionalAttributes field
+// in tftypes.Object as DynamicValue.Unmarshal will panic if the type contains an object
+// with optional attributes.
+//
+// NOTE we do want to include OptionalAttributes when returning the schema in GetProviderSchema
+// so that the optionality can be enforced by Terraform
+func GetProviderResourceSchema(optionalAttributes bool) map[string]*tfprotov5.Schema {
 	waitForType := tftypes.Object{
 		AttributeTypes: map[string]tftypes.Type{
 			"rollout": tftypes.Bool,
@@ -52,6 +59,10 @@ func GetProviderResourceSchema() map[string]*tfprotov5.Schema {
 			"rollout": {},
 			"fields":  {},
 		},
+	}
+
+	if !optionalAttributes {
+		waitForType.OptionalAttributes = nil
 	}
 
 	return map[string]*tfprotov5.Schema{
