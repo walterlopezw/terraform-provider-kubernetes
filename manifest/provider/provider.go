@@ -48,6 +48,10 @@ func GetProviderResourceSchema() map[string]*tfprotov5.Schema {
 				ElementType: tftypes.String,
 			},
 		},
+		OptionalAttributes: map[string]struct{}{
+			"rollout": {},
+			"fields":  {},
+		},
 	}
 
 	return map[string]*tfprotov5.Schema{
