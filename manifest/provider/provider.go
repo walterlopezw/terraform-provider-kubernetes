@@ -31,7 +31,7 @@ func GetObjectTypeFromSchema(schema *tfprotov5.Schema) tftypes.Type {
 
 // GetResourceType returns the tftypes.Type of a resource of type 'name'
 func GetResourceType(name string) (tftypes.Type, error) {
-	sch := GetProviderResourceSchema(false)
+	sch := GetProviderResourceSchema()
 	rsch, ok := sch[name]
 	if !ok {
 		return tftypes.DynamicPseudoType, fmt.Errorf("unknown resource %s - cannot find schema", name)
@@ -40,31 +40,7 @@ func GetResourceType(name string) (tftypes.Type, error) {
 }
 
 // GetProviderResourceSchema contains the definitions of all supported resources
-//
-// NOTE optionalAttributes specifies whether or not to include the OptionalAttributes field
-// in tftypes.Object as DynamicValue.Unmarshal will panic if the type contains an object
-// with optional attributes.
-//
-// NOTE we do want to include OptionalAttributes when returning the schema in GetProviderSchema
-// so that the optionality can be enforced by Terraform
-func GetProviderResourceSchema(optionalAttributes bool) map[string]*tfprotov5.Schema {
-	waitForType := tftypes.Object{
-		AttributeTypes: map[string]tftypes.Type{
-			"rollout": tftypes.Bool,
-			"fields": tftypes.Map{
-				ElementType: tftypes.String,
-			},
-		},
-		OptionalAttributes: map[string]struct{}{
-			"rollout": {},
-			"fields":  {},
-		},
-	}
-
-	if !optionalAttributes {
-		waitForType.OptionalAttributes = nil
-	}
-
+func GetProviderResourceSchema() map[string]*tfprotov5.Schema {
 	return map[string]*tfprotov5.Schema{
 		"kubernetes_manifest": {
 			Version: 1,
@@ -131,6 +107,29 @@ func GetProviderResourceSchema(optionalAttributes bool) map[string]*tfprotov5.Sc
 							},
 						},
 					},
+					{
+						TypeName: "wait",
+						Nesting:  tfprotov5.SchemaNestedBlockNestingModeList,
+						MinItems: 0,
+						MaxItems: 1,
+						Block: &tfprotov5.SchemaBlock{
+							Description: "Configure waiter options.",
+							Attributes: []*tfprotov5.SchemaAttribute{
+								{
+									Name:        "rollout",
+									Type:        tftypes.Bool,
+									Optional:    true,
+									Description: "Wait for rollout to complete on resources that support `kubectl rollout status`.",
+								},
+								{
+									Name:        "fields",
+									Type:        tftypes.Map{ElementType: tftypes.String},
+									Optional:    true,
+									Description: "A map of paths to fields to wait for a specific field value.",
+								},
+							},
+						},
+					},
 				},
 				Attributes: []*tfprotov5.SchemaAttribute{
 					{
@@ -147,10 +146,16 @@ func GetProviderResourceSchema(optionalAttributes bool) map[string]*tfprotov5.Sc
 						Description: "The resulting resource state, as returned by the API server after applying the desired state from `manifest`.",
 					},
 					{
-						Name:        "wait_for",
-						Type:        waitForType,
+						Name: "wait_for",
+						Type: tftypes.Object{
+							AttributeTypes: map[string]tftypes.Type{
+								"fields": tftypes.Map{
+									ElementType: tftypes.String,
+								},
+							},
+						},
 						Optional:    true,
-						Computed:    true,
+						Deprecated:  true,
 						Description: "A map of attribute paths and desired patterns to be matched. After each apply the provider will wait for all attributes listed here to reach a value that matches the desired pattern.",
 					},
 					{

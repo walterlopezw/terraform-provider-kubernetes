@@ -196,6 +196,7 @@ func (w *FieldWaiter) Wait(ctx context.Context) error {
 		}(obj)
 
 		if done {
+			w.logger.Info("[ApplyResourceChange][Wait] Done waiting.\n")
 			return err
 		}
 

@@ -39,7 +39,7 @@ resource kubernetes_manifest wait_for_rollout {
     }
   }
 
-  wait_for = {
+  wait {
     rollout = true
   }
 }
