@@ -2,12 +2,14 @@ package kubernetes
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8sschema "k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
@@ -33,7 +35,7 @@ func resourceKubernetesLabels() *schema.Resource {
 				Required:    true,
 				ForceNew:    true,
 			},
-			"metadata": &schema.Schema{
+			"metadata": {
 				Type:     schema.TypeList,
 				Required: true,
 				MaxItems: 1,
@@ -58,6 +60,11 @@ func resourceKubernetesLabels() *schema.Resource {
 				Type:        schema.TypeMap,
 				Description: "A map of labels to apply to the resource.",
 				Required:    true,
+			},
+			"force": {
+				Type:        schema.TypeBool,
+				Description: "Force overwriting labels that were created or edited outside of Terraform.",
+				Optional:    true,
 			},
 		},
 	}
@@ -117,8 +124,44 @@ func resourceKubernetesLabelsRead(ctx context.Context, d *schema.ResourceData, m
 		return diag.FromErr(err)
 	}
 
-	d.Set("labels", res.GetLabels())
+	configuredLabels := d.Get("labels").(map[string]interface{})
+
+	// strip out the labels not managed by Terraform
+	managedLabels, err := getManagedLabels(res.GetManagedFields(), defaultFieldManagerName)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+	labels := res.GetLabels()
+	for k := range labels {
+		_, managed := managedLabels["f:"+k]
+		_, configured := configuredLabels[k]
+		if !managed && !configured {
+			delete(labels, k)
+		}
+	}
+
+	d.Set("labels", labels)
 	return nil
+}
+
+// getManagedLabels reads the field manager metadata to discover which fields we're managing
+func getManagedLabels(managedFields []v1.ManagedFieldsEntry, manager string) (map[string]interface{}, error) {
+	var labels map[string]interface{}
+	for _, m := range managedFields {
+		if m.Manager != manager {
+			continue
+		}
+		var mm map[string]interface{}
+		err := json.Unmarshal(m.FieldsV1.Raw, &mm)
+		if err != nil {
+			return nil, err
+		}
+		metadata := mm["f:metadata"].(map[string]interface{})
+		if l, ok := metadata["f:labels"].(map[string]interface{}); ok {
+			labels = l
+		}
+	}
+	return labels, nil
 }
 
 func resourceKubernetesLabelsUpdate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
@@ -152,7 +195,8 @@ func resourceKubernetesLabelsUpdate(ctx context.Context, d *schema.ResourceData,
 
 	// determine if the resource is namespaced or not
 	var r dynamic.ResourceInterface
-	if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
+	namespacedResource := mapping.Scope.Name() == meta.RESTScopeNameNamespace
+	if namespacedResource {
 		if namespace == "" {
 			namespace = "default"
 		}
@@ -161,26 +205,39 @@ func resourceKubernetesLabelsUpdate(ctx context.Context, d *schema.ResourceData,
 		r = conn.Resource(mapping.Resource)
 	}
 
-	old, new := d.GetChange("labels")
+	// craft the patch to update the labels
+	labels := d.Get("labels")
 	if d.Id() == "" {
-		// if the ID is empty we're deleting the resource
-		new = map[string]interface{}{}
+		// if we're deleting then just we just patch
+		// with an empty labels map
+		labels = map[string]interface{}{}
 	}
-	patch := diffStringMap("/metadata/labels/",
-		old.(map[string]interface{}),
-		new.(map[string]interface{}))
+	patchmeta := map[string]interface{}{
+		"name":   name,
+		"labels": labels,
+	}
+	if namespacedResource {
+		patchmeta["namespace"] = namespace
+	}
+	patchobj := map[string]interface{}{
+		"apiVersion": apiVersion,
+		"kind":       kind,
+		"metadata":   patchmeta,
+	}
+	patch := unstructured.Unstructured{}
+	patch.Object = patchobj
 	patchbytes, err := patch.MarshalJSON()
 	if err != nil {
 		return diag.FromErr(err)
 	}
-
 	// apply the patch
 	_, err = r.Patch(ctx,
 		name,
-		types.JSONPatchType,
+		types.ApplyPatchType,
 		patchbytes,
 		v1.PatchOptions{
 			FieldManager: defaultFieldManagerName,
+			Force:        ptrToBool(d.Get("force").(bool)),
 		},
 	)
 	if err != nil {
