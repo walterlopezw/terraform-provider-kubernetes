@@ -96,6 +96,9 @@ func resourceKubernetesLabelsRead(ctx context.Context, d *schema.ResourceData, m
 		return diag.FromErr(err)
 	}
 	agr, err := restmapper.GetAPIGroupResources(dc)
+	if err != nil {
+		return diag.FromErr(err)
+	}
 	restMapper := restmapper.NewDiscoveryRESTMapper(agr)
 	gv, err := k8sschema.ParseGroupVersion(apiVersion)
 	if err != nil {
@@ -182,6 +185,9 @@ func resourceKubernetesLabelsUpdate(ctx context.Context, d *schema.ResourceData,
 		return diag.FromErr(err)
 	}
 	agr, err := restmapper.GetAPIGroupResources(dc)
+	if err != nil {
+		return diag.FromErr(err)
+	}
 	restMapper := restmapper.NewDiscoveryRESTMapper(agr)
 	gv, err := k8sschema.ParseGroupVersion(apiVersion)
 	if err != nil {
